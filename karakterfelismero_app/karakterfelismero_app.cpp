@@ -1,9 +1,66 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 using namespace cv;
+
+struct flips
+{
+    int flipCount;
+    int rowCount;
+};
+
+int compareFlips(flips a, flips b)
+{
+    return (a.flipCount < b.flipCount) ? 1 : 0;
+}
+
+//https://en.wikipedia.org/wiki/Walsh_matrix
+vector<int[64][64]> GenerateWalshMatrices()
+{
+    vector<int[64][64]> matrices;
+    int H[64][64];
+    H[0][0] = 1;
+    for (int x = 1; x < 64; x += x)
+    {
+        for (int i = 0; i < x; i++)
+        {
+            for (int j = 0; j < x; j++)
+            {
+                H[i + x][j] = H[i][j];
+                H[i][j + x] = H[i][j];
+                H[i + x][j + x] = -H[i][j];
+            }
+        }
+    }
+    flips f[64];
+    for (int i = 0; i < 64; i++) 
+    {
+        f[i].rowCount = i;
+        int count = 0;
+        for (int j = 1; j < 64; j++) 
+        {
+            if (H[i][j] != H[i][j - 1]) 
+            {
+                count++;
+            }
+        }
+        f[i].flipCount = count;
+    }
+    sort(f, f+64, compareFlips);
+    int W[64][64];
+    for (int i = 0; i < 64; i++) 
+    {
+        for (int j = 0; j < 64; j++) 
+        {
+            W[i][j] = H[f[i].rowCount][j];
+        }
+    }
+
+    return matrices;
+}
 
 void PrintBinaryPixels(Mat img)
 {
@@ -234,10 +291,12 @@ int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
     int threshold = 100;
+    Size standardCharSize(64, 64);
+    vector<int[64][64]> walshMatrices = GenerateWalshMatrices();
 
     // Read the image file 
     Mat trainer = imread("C:\\Asztali backup\\Egyetem\\Msc\\1f_Képfeldolgozás_és_orvosi_képalkotás\\tanito.jpg");
-    Mat image = imread("C:\\Asztali backup\\Egyetem\\Msc\\1f_Képfeldolgozás_és_orvosi_képalkotás\\feldolgozando.jpg");
+    Mat sample = imread("C:\\Asztali backup\\Egyetem\\Msc\\1f_Képfeldolgozás_és_orvosi_képalkotás\\feldolgozando.jpg");
 
     // Check for failure 
     if (trainer.empty())
@@ -246,13 +305,14 @@ int main(int argc, char** argv)
         cin.get(); //wait for any key press 
         return -1;
     }
-    if (image.empty())
+    if (sample.empty())
     {
         cout << "Feldolgozandó képfájl nem található!!!" << endl;
         cin.get(); //wait for any key press 
         return -1;
     }
-
+    
+    /*
     //To grayscale
     Mat gray = BgrToGrayscale(image);
     
@@ -265,45 +325,43 @@ int main(int argc, char** argv)
     // Show our image inside a window. 
     imshow("Tanító kép", trainer);
     waitKey(0);
-    /*imshow("Feldolgozandó kép", image);
+    imshow("Feldolgozandó kép", image);
     waitKey(0);
     imshow("Feldolgozandó kép szürkében", gray);
     waitKey(0);
     imshow("Feldolgozandó kép binárisan", binary);
     waitKey(0);
     imshow("Feldolgozandó kép szûrve", filtered);
-    waitKey(0);*/
-
-    //To grayscale
-    Mat grayt = BgrToGrayscale(trainer);
-
-    //To binary
-    Mat binaryt = GrayscaleToBinary(grayt, threshold);
-
-    //Filter isolated
-    Mat filteredt = FilterIsolatedPixels(binaryt);
-
-    imshow("Tanító kép szürkében", grayt);
     waitKey(0);
-    imshow("Tanító kép binárisan", binaryt);
+    */
+
+    Mat trainerGray = BgrToGrayscale(trainer);
+    Mat trainerBinary = GrayscaleToBinary(trainerGray, threshold);
+    Mat trainerFiltered = FilterIsolatedPixels(trainerBinary);
+
+    imshow("Tanító kép szûrve", trainerFiltered);
     waitKey(0);
-    imshow("Tanító kép szûrve", filteredt);
-    waitKey(0);
-    //PrintBinaryPixels(trainer);
-    vector<Mat> lines = SliceHorizontally(filteredt);
-    vector<Mat> charsAll;
-    for (int i = 0; i < lines.size(); i++)
+
+    vector<Mat> trainerLines = SliceHorizontally(trainerFiltered);
+    vector<Mat> trainerCharsAll;
+    for (int i = 0; i < trainerLines.size(); i++)
     {
-        imshow("Lépegetõ", lines[i]);
+        imshow("Lépegetõ", trainerLines[i]);
         waitKey(0);
-        vector<Mat> chars = SliceVertically(lines[i]);
-        charsAll.insert(charsAll.end(), chars.begin(), chars.end());
+        vector<Mat> chars = SliceVertically(trainerLines[i]);
+        trainerCharsAll.insert(trainerCharsAll.end(), chars.begin(), chars.end());
     }
-    for (int i = 0; i < charsAll.size(); i++)
+
+    for (int i = 0; i < trainerCharsAll.size(); i++)
     {
-        imshow("Lépegetõ betû", charsAll[i]);
+        resize(trainerCharsAll[i], trainerCharsAll[i], standardCharSize);
+    }
+
+    for (int i = 0; i < trainerCharsAll.size(); i++)
+    {
+        imshow("Lépegetõ betû", trainerCharsAll[i]);
         waitKey(0);
-        PrintBinaryPixels(charsAll[i]);
+        PrintBinaryPixels(trainerCharsAll[i]);
     }
 
     return 0;
