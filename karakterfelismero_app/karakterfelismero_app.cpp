@@ -6,6 +6,8 @@
 using namespace std;
 using namespace cv;
 
+Size standardCharSize(64, 64);
+
 struct flips
 {
     int flipCount;
@@ -17,10 +19,26 @@ int compareFlips(flips a, flips b)
     return (a.flipCount < b.flipCount) ? 1 : 0;
 }
 
-//https://en.wikipedia.org/wiki/Walsh_matrix
-vector<int[64][64]> GenerateWalshMatrices()
+void PrintBinaryPixels(Mat img)
 {
-    vector<int[64][64]> matrices;
+    for (int i = 0; i < img.rows; i++)
+    {
+        for (int j = 0; j < img.cols; j++)
+        {
+            uchar pixel = (int)img.at<uchar>(i, j);
+            if (pixel == 255)
+                cout << " ";
+            else
+                cout << "0";
+        }
+        cout << "\n";
+    }
+}
+
+//https://en.wikipedia.org/wiki/Walsh_matrix
+vector<Mat> GenerateWalshMatrices()
+{
+    vector<Mat> matrices;
     int H[64][64];
     H[0][0] = 1;
     for (int x = 1; x < 64; x += x)
@@ -55,27 +73,41 @@ vector<int[64][64]> GenerateWalshMatrices()
     {
         for (int j = 0; j < 64; j++) 
         {
-            W[i][j] = H[f[i].rowCount][j];
+            if (H[f[i].rowCount][j] == -1)
+            {
+                W[i][j] = 255;
+            }
+            else 
+            {
+                W[i][j] = 0;
+            }
         }
     }
-
-    return matrices;
-}
-
-void PrintBinaryPixels(Mat img)
-{
-    for (int i = 0; i < img.rows; i++)
+    uint8_t* WArr = (uint8_t*)malloc(sizeof(uint8_t) * 64 * 64);
+    for (int i = 0; i < 64; i++)
     {
-        for (int j = 0; j < img.cols; j++)
+        for (int j = 0; j < 64; j++)
         {
-            uchar pixel = (int)img.at<uchar>(i, j);
-            if (pixel == 255)
-                cout << " ";
-            else
-                cout << "0";
+            WArr[i * 64 + j] = W[i][j];
         }
-        cout << "\n";
     }
+    Mat WMat(64, 64, CV_8U, WArr);
+    imshow("Wmat", WMat);
+    waitKey(0);
+    
+    for (int i = 0; i < 64; i += 8)
+    {
+        for (int j = 0; j < 64; j += 8)
+        {
+            Mat subMat = WMat(Rect(i, j, 8, 8));
+            resize(subMat, subMat, standardCharSize);
+            matrices.push_back(subMat);
+            imshow("sm", subMat);
+            waitKey(0);
+            PrintBinaryPixels(subMat);
+        }
+    }
+    return matrices;
 }
 
 //Súlyozott módszer: https://www.tutorialspoint.com/dip/grayscale_to_rgb_conversion.htm
@@ -291,8 +323,7 @@ int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
     int threshold = 100;
-    Size standardCharSize(64, 64);
-    vector<int[64][64]> walshMatrices = GenerateWalshMatrices();
+    vector<Mat> walshMatrices = GenerateWalshMatrices();
 
     // Read the image file 
     Mat trainer = imread("C:\\Asztali backup\\Egyetem\\Msc\\1f_Képfeldolgozás_és_orvosi_képalkotás\\tanito.jpg");
@@ -339,15 +370,15 @@ int main(int argc, char** argv)
     Mat trainerBinary = GrayscaleToBinary(trainerGray, threshold);
     Mat trainerFiltered = FilterIsolatedPixels(trainerBinary);
 
-    imshow("Tanító kép szûrve", trainerFiltered);
-    waitKey(0);
+    //imshow("Tanító kép szûrve", trainerFiltered);
+    //waitKey(0);
 
     vector<Mat> trainerLines = SliceHorizontally(trainerFiltered);
     vector<Mat> trainerCharsAll;
     for (int i = 0; i < trainerLines.size(); i++)
     {
-        imshow("Lépegetõ", trainerLines[i]);
-        waitKey(0);
+        //imshow("Lépegetõ", trainerLines[i]);
+        //waitKey(0);
         vector<Mat> chars = SliceVertically(trainerLines[i]);
         trainerCharsAll.insert(trainerCharsAll.end(), chars.begin(), chars.end());
     }
@@ -357,12 +388,12 @@ int main(int argc, char** argv)
         resize(trainerCharsAll[i], trainerCharsAll[i], standardCharSize);
     }
 
-    for (int i = 0; i < trainerCharsAll.size(); i++)
+    /*for (int i = 0; i < trainerCharsAll.size(); i++)
     {
         imshow("Lépegetõ betû", trainerCharsAll[i]);
         waitKey(0);
         PrintBinaryPixels(trainerCharsAll[i]);
-    }
+    }*/
 
     return 0;
 }
