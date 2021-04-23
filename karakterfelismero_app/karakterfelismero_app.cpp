@@ -8,6 +8,12 @@ using namespace cv;
 
 Size standardCharSize(64, 64);
 
+struct charSeq
+{
+    char character;
+    int propVec[64];
+};
+
 struct flips
 {
     int flipCount;
@@ -92,8 +98,6 @@ vector<Mat> GenerateWalshMatrices()
         }
     }
     Mat WMat(64, 64, CV_8U, WArr);
-    imshow("Wmat", WMat);
-    waitKey(0);
     
     for (int i = 0; i < 64; i += 8)
     {
@@ -102,9 +106,6 @@ vector<Mat> GenerateWalshMatrices()
             Mat subMat = WMat(Rect(i, j, 8, 8));
             resize(subMat, subMat, standardCharSize);
             matrices.push_back(subMat);
-            imshow("sm", subMat);
-            waitKey(0);
-            PrintBinaryPixels(subMat);
         }
     }
     return matrices;
@@ -319,10 +320,88 @@ Mat FilterIsolatedPixels(Mat img)
     return result;
 }
 
+charSeq* GetTrainerValues(char* chars, vector<Mat> trainerChars, vector<Mat> walshMatrices)
+{
+    charSeq* trainers = (charSeq*)malloc(sizeof(charSeq) * trainerChars.size());
+    for (int j = 0; j < 80; j++) 
+    {
+        trainers[j].character = chars[j];
+        for (int i = 0; i < 64; i++)
+        {
+            int commonPoints = 0;
+            for (int x = 0; x < 64; x++)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    int pixelWalsh = (int)walshMatrices[i].at<uchar>(x, y);
+                    int pixelChar = (int)trainerChars[j].at<uchar>(x, y);
+                    if (pixelWalsh == 0 && pixelChar == 0)
+                    {
+                        commonPoints++;
+                    }
+                }
+            }
+            trainers[j].propVec[i] = commonPoints;
+        }
+    }
+    return trainers;
+}
+
+charSeq* GetSampleValues(vector<Mat> sampleChars, vector<Mat> walshMatrices)
+{
+    charSeq* samples = (charSeq*)malloc(sizeof(charSeq) * sampleChars.size());
+    for (int j = 0; j < sampleChars.size(); j++)
+    {
+        for (int i = 0; i < 64; i++)
+        {
+            int commonPoints = 0;
+            for (int x = 0; x < 64; x++)
+            {
+                for (int y = 0; y < 64; y++)
+                {
+                    int pixelWalsh = (int)walshMatrices[i].at<uchar>(x, y);
+                    int pixelChar = (int)sampleChars[j].at<uchar>(x, y);
+                    if (pixelWalsh == 0 && pixelChar == 0)
+                    {
+                        commonPoints++;
+                    }
+                }
+            }
+            samples[j].propVec[i] = commonPoints;
+        }
+    }
+    return samples;
+}
+
+char* compareSamplesWithTrainers(charSeq* samples, charSeq* trainers, int samplesSize, int trainersSize)
+{
+    char* solution = (char*)malloc(sizeof(char) * samplesSize);
+    for (int i = 0; i < samplesSize; i++) 
+    {
+        int diffSum = INT_MAX;
+        for (int j = 0; j < trainersSize; j++)
+        {
+            int diff = 0;
+            for (int k = 0; k < 64; k++)
+            {
+                diff += abs(samples[i].propVec[k] - trainers[j].propVec[k]);
+            }
+            if (diff < diffSum) 
+            {
+                diffSum = diff;
+                solution[i] = trainers[j].character;
+                cout << solution[i];
+            }
+        }
+        cout << endl;
+    }
+    return solution;
+}
+
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, "");
-    int threshold = 100;
+    int threshold = 150;
     vector<Mat> walshMatrices = GenerateWalshMatrices();
 
     // Read the image file 
@@ -342,43 +421,15 @@ int main(int argc, char** argv)
         cin.get(); //wait for any key press 
         return -1;
     }
-    
-    /*
-    //To grayscale
-    Mat gray = BgrToGrayscale(image);
-    
-    //To binary
-    Mat binary = GrayscaleToBinary(gray, threshold);
-
-    //Filter isolated
-    Mat filtered = FilterIsolatedPixels(binary);
-
-    // Show our image inside a window. 
-    imshow("Tanító kép", trainer);
-    waitKey(0);
-    imshow("Feldolgozandó kép", image);
-    waitKey(0);
-    imshow("Feldolgozandó kép szürkében", gray);
-    waitKey(0);
-    imshow("Feldolgozandó kép binárisan", binary);
-    waitKey(0);
-    imshow("Feldolgozandó kép szûrve", filtered);
-    waitKey(0);
-    */
 
     Mat trainerGray = BgrToGrayscale(trainer);
     Mat trainerBinary = GrayscaleToBinary(trainerGray, threshold);
     Mat trainerFiltered = FilterIsolatedPixels(trainerBinary);
 
-    //imshow("Tanító kép szûrve", trainerFiltered);
-    //waitKey(0);
-
     vector<Mat> trainerLines = SliceHorizontally(trainerFiltered);
     vector<Mat> trainerCharsAll;
     for (int i = 0; i < trainerLines.size(); i++)
     {
-        //imshow("Lépegetõ", trainerLines[i]);
-        //waitKey(0);
         vector<Mat> chars = SliceVertically(trainerLines[i]);
         trainerCharsAll.insert(trainerCharsAll.end(), chars.begin(), chars.end());
     }
@@ -388,12 +439,43 @@ int main(int argc, char** argv)
         resize(trainerCharsAll[i], trainerCharsAll[i], standardCharSize);
     }
 
-    /*for (int i = 0; i < trainerCharsAll.size(); i++)
+    char chars[] = "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789,.!?-()’„”_+%=/@<>";
+    charSeq* trainers = GetTrainerValues(chars, trainerCharsAll, walshMatrices);
+
+    imshow("Feldolgozandó kép", sample);
+    waitKey(0);
+    Mat sampleGray = BgrToGrayscale(sample);
+    imshow("Feldolgozandó kép szürkében", sampleGray);
+    waitKey(0);
+    Mat sampleBinary = GrayscaleToBinary(sampleGray, threshold);
+    imshow("Feldolgozandó kép binárisan", sampleBinary);
+    waitKey(0);
+    Mat sampleFiltered = FilterIsolatedPixels(sampleBinary);
+    imshow("Feldolgozandó kép szûrve", sampleFiltered);
+    waitKey(0);
+
+    vector<Mat> sampleLines = SliceHorizontally(sampleFiltered);
+    vector<Mat> sampleCharsAll;
+    for (int i = 0; i < sampleLines.size(); i++)
     {
-        imshow("Lépegetõ betû", trainerCharsAll[i]);
-        waitKey(0);
-        PrintBinaryPixels(trainerCharsAll[i]);
-    }*/
+        vector<Mat> chars = SliceVertically(sampleLines[i]);
+        sampleCharsAll.insert(sampleCharsAll.end(), chars.begin(), chars.end());
+    }
+
+    for (int i = 0; i < sampleCharsAll.size(); i++)
+    {
+        resize(sampleCharsAll[i], sampleCharsAll[i], standardCharSize);
+    }
+
+    charSeq* samples = GetSampleValues(sampleCharsAll, walshMatrices);
+
+    char* solution;
+    solution = compareSamplesWithTrainers(samples, trainers, sampleCharsAll.size(), trainerCharsAll.size());
+
+    for (int i = 0; i <= sampleCharsAll.size(); i++)
+    {
+        cout << solution[i];
+    }
 
     return 0;
 }
